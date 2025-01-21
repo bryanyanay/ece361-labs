@@ -10,6 +10,8 @@
 
 #define MAXBUFLEN 1500
 
+// credits: some of this code is adapted from beej's handbook, mainly section 6.3
+
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: server <server port number>\n");
