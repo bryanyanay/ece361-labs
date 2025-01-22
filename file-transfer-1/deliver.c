@@ -25,6 +25,7 @@ int main(int argc, char *argv[]) {
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
 
+    // no need for us to use inet_pton since getaddrinfo accepts a string ip address (or hostname)
     if ((status = getaddrinfo(argv[1], argv[2], &hints, &servinfo)) != 0) { // non-zero return means error
         fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
         exit(1);
@@ -49,26 +50,33 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    // // QUERY USER
-    // printf("Input file transfer cmd: ftp <file-name>\n");
-    // char input_buf[MAXBUFLEN] = {0};
-    // if (fgets(input_buf, MAXBUFLEN, stdin) == NULL) {
-    //     printf("Error reading input.\n");
-    //     freeaddrinfo(servinfo);
-    //     close(sockfd);
-    //     exit(1);
-    // }
-    // input_buf[strcspn(input_buf, "\n")] = '\0'; // replace the trailing newline with null character
+    // QUERY USER
+    printf("Input file transfer cmd: ftp <file-name>\n>>> ");
+    char input_buf[MAXBUFLEN] = {0};
+    if (fgets(input_buf, MAXBUFLEN, stdin) == NULL) {
+        fprintf(stderr, "Error reading input.\n");
+        freeaddrinfo(servinfo);
+        close(sockfd);
+        exit(1);
+    }
+    input_buf[strcspn(input_buf, "\n")] = '\0'; // replace the trailing newline with null character
 
 
-    // char *cmd = strtok(input_buf, " "); // up to first space
-    // char *filename = strtok(NULL, " "); // up to 2nd space (should be end of string)
-    // if (!cmd || !filename || (strtok(NULL, " ") != NULL)) { // make sure cmd and filename are non-NULL and there is nothing left in the input
-    //     printf("Input must be of form ftp <file-name>, with no spaces in the file name.\n");
-    //     freeaddrinfo(servinfo);
-    //     close(sockfd);
-    //     exit(1);
-    // }
+    char *cmd = strtok(input_buf, " "); // up to first space
+    char *filename = strtok(NULL, " "); // up to 2nd space (should be end of string)
+    if (!cmd || !filename || (strtok(NULL, " ") != NULL)) { // make sure cmd and filename are non-NULL and there is nothing left in the input
+        fprintf(stderr, "Input must be of form ftp <file-name>, with no spaces in the file name.\n");
+        freeaddrinfo(servinfo);
+        close(sockfd);
+        exit(1);
+    }
+
+    if (access(filename, F_OK) != 0) {
+        fprintf(stderr, "File does not exist.\n");
+        freeaddrinfo(servinfo);
+        close(sockfd);
+        exit(1);
+    }
 
     // SEND A MESSAGE
     char *msg = "ftp";
@@ -80,8 +88,6 @@ int main(int argc, char *argv[]) {
         close(sockfd);
         exit(1);
     }
-
-    printf(">>> sent message %d bytes long\n", numbytes);
 
     // RECEIVE SERVER REPLY
     char recv_buf[MAXBUFLEN];
