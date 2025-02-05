@@ -11,6 +11,8 @@
 #define MAXBUFLEN 1500
 #define FRAG_SIZE 1000
 
+// credits: some of this code is adapted from beej's handbook, mainly section 6.3
+
 struct packet {
     unsigned int total_frag;
     unsigned int frag_no;
@@ -135,7 +137,7 @@ void sendFile(int sockfd, const char *filename, struct addrinfo *ai, int verbose
 
 double get_time_diff(struct timespec start, struct timespec end) {
     // in milliseconds
-    return (end.tv_sec - start.tv_sec) * 1000L + (end.tv_nsec - start.tv_nsec) / 1000000L;
+    return (end.tv_sec - start.tv_sec) * 1e3 + (end.tv_nsec - start.tv_nsec) / 1e6;
 }
 
 int main(int argc, char *argv[]) {
@@ -209,7 +211,7 @@ int main(int argc, char *argv[]) {
     sendMsg(sockfd, msg, strlen(msg), curr);
 
     char recv_buf[MAXBUFLEN];
-    numbytes = recvMsg(sockfd, recv_buf);
+    int numbytes = recvMsg(sockfd, recv_buf);
     recv_buf[numbytes] = '\0'; // reply we know should be string
 
     clock_gettime(CLOCK_MONOTONIC, &end); 
