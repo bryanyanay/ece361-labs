@@ -136,6 +136,7 @@ void recvFile(int sockfd, int verbose) {
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: server <server port number>\n");
+        exit(1);
     }
 
     // POPULATE ADDRINFOS
