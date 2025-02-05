@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #define MAXBUFLEN 1500
+#define FRAG_SIZE 1000
 
 // credits: some of this code is adapted from beej's handbook, mainly section 6.3
 
@@ -17,6 +18,42 @@ struct packet {
     unsigned int size;
     char *filename;
     char filedata[1000];
+};
+
+struct ackpkt {
+    unsigned int ack_nack; // 1 for ack, 0 for nack
+    unsigned int frag_no;
+};
+
+void deserializeAck(const char *src_buf, size_t buf_size, struct ackpkt *ackpkt) {
+    char temp_buf[buf_size + 1];
+    memcpy(temp_buf, src_buf, buf_size); 
+    temp_buf[buf_size] = '\0'; // should be unnecessary bc the serialized ack packet is null-terminated
+
+    char *field = strtok(temp_buf, ":");
+    ackpkt->ack_nack = atoi(field);
+    field = strtok(temp_buf, ":");
+    ackpkt->frag_no = atoi(field);
+}
+
+size_t serializePkt(const struct packet *pkt, char *dest_buf, size_t buf_size) {
+    // note here we write the numbers as their corresponding ascii chars, not as binary numbers
+    // snprintf writes a terminating null, but memcpy overwrites that with the first byte of filedata
+    int header_len = snprintf(dest_buf, buf_size, "%u:%u:%u:%s:", pkt->total_frag, pkt->frag_no, pkt->size, pkt->filename);
+    
+    if (header_len < 0 || header_len >= buf_size) {
+        fprintf(stderr, "Error: header_len error when serializing packet\n");
+        return 0;
+    }
+
+    size_t total_size = header_len + pkt->size;
+    if (total_size > buf_size) {
+        fprintf(stderr, "Error: packet too big for serialization\n");
+        return 0;
+    }
+
+    memcpy(dest_buf + header_len, pkt->filedata, pkt->size);
+    return total_size;
 }
 
 void sendMsg(int sockfd, const void *msg, size_t len, struct addrinfo *ai) {
@@ -30,7 +67,8 @@ void sendMsg(int sockfd, const void *msg, size_t len, struct addrinfo *ai) {
     }
 }
 
-int recvMsg(int sockfd, char *recv_buf) {
+// NOTE: perhaps in the future pass the expected length to receive into recvMsg
+int recvMsg(int sockfd, void *recv_buf) {
     int numbytes;
     struct sockaddr_storage serv_addr;
     socklen_t serv_addr_len = sizeof serv_addr;
@@ -41,6 +79,60 @@ int recvMsg(int sockfd, char *recv_buf) {
     }
 
     return numbytes;
+}
+
+void sendFile(int sockfd, const char *filename, struct addrinfo *ai, int verbose) {
+    
+    FILE *file = fopen(filename, "rb");
+    if (!file) { // see if NULL
+        perror("fopen");
+        exit(1);
+    }
+
+    fseek(file, 0, SEEK_END); // move to end of file
+    long file_size = ftell(file); // position in file (we are at end, so we get length)
+    rewind(file);
+
+    unsigned int total_frag = (file_size + (FRAG_SIZE - 1)) / FRAG_SIZE; // file_size / FRAG_SIZE would truncate towards 0, add FRAG_SIZE - 1 to ceil
+    struct packet pkt;
+    pkt.filename = strdup(filename);
+    pkt.total_frag = total_frag;
+
+    printf("File %s is %d bytes long, %u fragments\n", filename, file_size, total_frag);
+
+    unsigned int frag_no = 1;
+    while (frag_no <= total_frag) {
+        long initial_pos = ftell(file);
+
+        pkt.frag_no = frag_no;
+        pkt.size = fread(pkt.filedata, 1, FRAG_SIZE, file);
+
+        char send_buf[MAXBUFLEN];
+        size_t send_len = serializePkt(&pkt, send_buf, MAXBUFLEN);
+        sendMsg(sockfd, send_buf, send_len, ai);
+        if (verbose) {
+            printf("Sent packet %u/%u (%d file bytes)\n", pkt.frag_no, pkt.total_frag, pkt.size);
+        }
+
+        struct ackpkt ack_nack;
+        char recv_buf[MAXBUFLEN];
+        recvMsg(sockfd, recv_buf);
+        deserializeAck(recv_buf, MAXBUFLEN, &ack_nack);
+
+        if (ack_nack.ack_nack == 1) {
+            if (verbose) {
+                printf("Received ack for fragment %u\n", ack_nack.frag_no);
+            }
+            frag_no += 1;
+        } else { // retransmit if nack
+            printf("Received nack for fragment %u\n", ack_nack.frag_no);
+            fseek(file, initial_pos, SEEK_SET);
+        }
+    }
+
+    printf("Finished transmitting file.\n");
+
+    free(pkt.filename);
 }
 
 int main(int argc, char *argv[]) {
@@ -118,14 +210,17 @@ int main(int argc, char *argv[]) {
     int numbytes;
     char recv_buf[MAXBUFLEN];
     numbytes = recvMsg(sockfd, recv_buf);
+    recv_buf[numbytes] = '\0'; // reply we know should be string
 
     if (strcmp("yes", recv_buf) == 0) {
         printf("A file transfer can start.\n");
     } else {
+        printf("Server cannot accept file transfer right now.\n");
         exit(1);
     }
 
-    // don't need it anymore
+    sendFile(sockfd, filename, curr, 0);
+
     freeaddrinfo(servinfo);
     close(sockfd);
 
