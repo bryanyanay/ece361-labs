@@ -10,8 +10,12 @@
 
 #define MAXBUFLEN 1500
 #define FRAG_SIZE 1000
+#define MAX_TIMEOUT 30000
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 // credits: some of this code is adapted from beej's handbook, mainly section 6.3
+
+// I ACCIDENTALLY WORKED ON THIS FOR FILE-TRANSFER-3; SO THIS IS ACTUALLY (INCOMPLETE) FILE-TRANSFER-3 CODE
 
 struct packet {
     unsigned int total_frag;
@@ -25,6 +29,10 @@ struct ackpkt {
     unsigned int ack_nack; // 1 for ack, 0 for nack
     unsigned int frag_no;
 };
+
+double timeout_ms = 1000; // initial timeout 1 sec
+double estimatedRTT = 1000, devRTT = 500;
+int exp_backoff = 0; // whether we are in exponential backoff mode or not
 
 void deserializeAck(const char *src_buf, size_t buf_size, struct ackpkt *ackpkt) {
     char temp_buf[buf_size + 1];
@@ -68,12 +76,29 @@ void sendMsg(int sockfd, const void *msg, size_t len, struct addrinfo *ai) {
 }
 
 // NOTE: perhaps in the future pass the expected length to receive into recvMsg
-int recvMsg(int sockfd, void *recv_buf) {
+int recvMsg(int sockfd, void *recv_buf, double timeout_ms) {
+    // will return -1 on timeout
+
+    // set timeout 
+    struct timeval timeout_struct;
+    timeout_struct.tv_sec = (long) (timeout_ms / 1000);
+    timeout_struct.tv_usec = ((long) (timeout_ms * 1000)) % 1000000;
+
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout_struct, sizeof(timeout_struct)) < 0) {
+        perror("setsockopt");
+        exit(1);
+    }
+
+    // receive the data
     int numbytes;
     struct sockaddr_storage serv_addr;
     socklen_t serv_addr_len = sizeof serv_addr;
+
     numbytes = recvfrom(sockfd, recv_buf, MAXBUFLEN - 1, 0, (struct sockaddr *) &serv_addr, &serv_addr_len);
     if (numbytes == -1) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN) { // timeout
+            return -1; 
+        }
         perror("recvfrom");
         exit(1);
     }
@@ -82,7 +107,6 @@ int recvMsg(int sockfd, void *recv_buf) {
 }
 
 void sendFile(int sockfd, const char *filename, struct addrinfo *ai, int verbose) {
-    
     FILE *file = fopen(filename, "rb");
     if (!file) { // see if NULL
         perror("fopen");
@@ -100,6 +124,7 @@ void sendFile(int sockfd, const char *filename, struct addrinfo *ai, int verbose
 
     printf("File %s is %d bytes long, %u fragments\n", filename, file_size, total_frag);
 
+    // begin transmission
     unsigned int frag_no = 1;
     while (frag_no <= total_frag) {
         long initial_pos = ftell(file);
@@ -107,8 +132,11 @@ void sendFile(int sockfd, const char *filename, struct addrinfo *ai, int verbose
         pkt.frag_no = frag_no;
         pkt.size = fread(pkt.filedata, 1, FRAG_SIZE, file);
 
+        struct timespec start, end;
+
         char send_buf[MAXBUFLEN];
         size_t send_len = serializePkt(&pkt, send_buf, MAXBUFLEN);
+        clock_gettime(CLOCK_MONOTONIC, &start); // start of RTT
         sendMsg(sockfd, send_buf, send_len, ai);
         if (verbose) {
             printf("Sent packet %u/%u (%d file bytes)\n", pkt.frag_no, pkt.total_frag, pkt.size);
@@ -116,15 +144,35 @@ void sendFile(int sockfd, const char *filename, struct addrinfo *ai, int verbose
 
         struct ackpkt ack_nack;
         char recv_buf[MAXBUFLEN];
-        recvMsg(sockfd, recv_buf);
+        int numbytes = recvMsg(sockfd, recv_buf, timeout_ms);
+
+        if (numbytes == -1) { // timeout
+            printf(">>> TIMEOUT for fragment %u, : waited %.6f ms", frag_no, timeout_ms);
+            exp_backoff = 1;
+            timeout_ms = MAX(timeout_ms * 2, MAX_TIMEOUT);
+
+            fseek(file, initial_pos, SEEK_SET);
+            continue;
+        }
+
+        clock_gettime(CLOCK_MONOTONIC, &end); // end of RTT
+        double rtt = get_time_diff(start, end);
+
         deserializeAck(recv_buf, MAXBUFLEN, &ack_nack);
 
         if (ack_nack.ack_nack == 1) {
             if (verbose) {
                 printf("Received ack for fragment %u\n", ack_nack.frag_no);
             }
-            frag_no += 1;
-        } else { // retransmit if nack
+            if (exp_backoff) {
+                exp_backoff = 0;
+                timeout_ms = MAX(estimatedRTT + 4 * devRTT, MAX_TIMEOUT);
+            } else {
+                updateRTT(rtt);
+                timeout_ms = MAX(estimatedRTT + 4 * devRTT, MAX_TIMEOUT);
+            }
+            frag_no += 1; 
+        } else { // retransmit if nack (this case isn't rlly used)
             printf("Received nack for fragment %u\n", ack_nack.frag_no);
             fseek(file, initial_pos, SEEK_SET);
         }
@@ -138,6 +186,25 @@ void sendFile(int sockfd, const char *filename, struct addrinfo *ai, int verbose
 double get_time_diff(struct timespec start, struct timespec end) {
     // in milliseconds
     return (end.tv_sec - start.tv_sec) * 1e3 + (end.tv_nsec - start.tv_nsec) / 1e6;
+}
+
+/* Timeout calculation
+EstimatedRTT = (1-0.125) * EstimatedRTT + (0.125) * SampleRTT
+DevRTT = (1-0.25) * DevRTT + (0.25) * |SampleRTT - EstimatedRTT|
+initial DevRTT will be half of first EstimatedRTT
+timeout = EstimatedRTT + 4 * DevRTT
+initial timeout = 1 sec?
+karn's alg: exponential backoff on retransmission
+cap the timeout at 30s
+*/
+
+void updateRTT(double sampleRTT) {
+    estimatedRTT = (1 - 0.125) * estimatedRTT + (0.125) * sampleRTT;
+    if (sampleRTT - estimatedRTT > 0) {
+        devRTT = (1 - 0.25) * devRTT + (0.25) * (sampleRTT - estimatedRTT);
+    } else {
+        devRTT = (1 - 0.25) * devRTT + (0.25) * (estimatedRTT - sampleRTT);
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -204,20 +271,43 @@ int main(int argc, char *argv[]) {
     }
 
     // initial handshake
+    
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start); 
 
-    char *msg = "ftp";
-    sendMsg(sockfd, msg, strlen(msg), curr);
+    while (1) { // keep retransmitting if timeout
+        char *msg = "ftp";
+        sendMsg(sockfd, msg, strlen(msg), curr);
 
-    char recv_buf[MAXBUFLEN];
-    int numbytes = recvMsg(sockfd, recv_buf);
+        char recv_buf[MAXBUFLEN];
+        int numbytes = recvMsg(sockfd, recv_buf, timeout_ms);
+
+        if (numbytes == -1) { // timeout
+            printf(">>> TRANSMISSION TIMED OUT: waited %.6f ms", timeout_ms);
+            exp_backoff = 1;
+            timeout_ms = MAX(timeout_ms * 2, MAX_TIMEOUT);
+            continue;
+        } else {
+            break;
+        }
+    }
+    
     recv_buf[numbytes] = '\0'; // reply we know should be string
 
     clock_gettime(CLOCK_MONOTONIC, &end); 
 
     double rtt = get_time_diff(start, end);
-    printf("Round-Trip Time: %.6f milliseconds\n", rtt);
+
+    if (exp_backoff) { // if first message required retransmissions, then the RTT we measured isn't rlly valid
+        printf("Round-Trip Time (likely invalid, required retransmissions): %.6f milliseconds\n", rtt);
+        // reset exp_backoff
+        exp_backoff = 0;
+        timeout_ms = MAX(estimatedRTT + 4 * devRTT, MAX_TIMEOUT); 
+    } else {
+        printf("Round-Trip Time: %.6f milliseconds\n", rtt);
+        updateRTT(rtt);
+        timeout_ms = MAX(estimatedRTT + 4 * devRTT, MAX_TIMEOUT);
+    }
 
     if (strcmp("yes", recv_buf) == 0) {
         printf("A file transfer can start.\n");
