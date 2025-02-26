@@ -29,8 +29,8 @@ struct ackpkt {
     unsigned int frag_no;
 };
 
-double timeout_ms = 1000; // initial timeout 1 sec
-double estimatedRTT = 1000, devRTT = 500;
+double timeout_ms = 100; // initial timeout 0.1 sec
+double estimatedRTT = 100, devRTT = 50;
 int exp_backoff = 0; // whether we are in exponential backoff mode or not
 
 void deserializeAck(const char *src_buf, size_t buf_size, struct ackpkt *ackpkt) {
@@ -160,7 +160,7 @@ void sendFile(int sockfd, const char *filename, struct addrinfo *ai, int verbose
         int numbytes = recvMsg(sockfd, recv_buf, timeout_ms);
 
         if (numbytes == -1) { // timeout
-            printf("TIMEOUT for fragment %u, : waited %.6f ms\n", frag_no, timeout_ms);
+            printf("TIMEOUT for fragment %u: waited %.6f ms\n", frag_no, timeout_ms);
             exp_backoff = 1;
             timeout_ms = MIN(timeout_ms * 2, MAX_TIMEOUT);
 

@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <time.h>
 
 
 #define MAXBUFLEN 1500
@@ -88,7 +89,15 @@ void recvFile(int sockfd, int verbose) {
 
     while (1) {
         recvMsg(sockfd, recv_buf, &client_addr, &client_addr_len);
+
+        double rand_val = (double) rand() / RAND_MAX; // between 0 and 1
+
         deserializePkt(recv_buf, MAXBUFLEN, &pkt);
+
+        if (rand_val <= 0.05) { 
+            printf("DROP PACKET: fragment %u\n", pkt.frag_no);
+            continue;
+        }
 
         if (!recv_filename) { // first packet, get the filename and open the file
             recv_filename = strdup(pkt.filename);
@@ -137,6 +146,8 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Usage: server <server port number>\n");
         exit(1);
     }
+
+    srand(time(NULL)); // seed rng
 
     // POPULATE ADDRINFOS
     int status;
