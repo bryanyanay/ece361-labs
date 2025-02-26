@@ -94,7 +94,7 @@ void recvFile(int sockfd, int verbose) {
 
         deserializePkt(recv_buf, MAXBUFLEN, &pkt);
 
-        if (rand_val <= 0.05) { 
+        if (rand_val <= 0.01) { 
             printf("DROP PACKET: fragment %u\n", pkt.frag_no);
             continue;
         }
