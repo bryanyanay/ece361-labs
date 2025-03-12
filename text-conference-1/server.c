@@ -115,6 +115,35 @@ int is_session_empty(const char *session_id) { // not sure if we'll need this
     return 1;  // session empty
 }
 
+int client_exists(const char *client_id) {
+    struct client_info *current = client_list;
+
+    while (current != NULL) {
+        if (strcmp(current->client_id, client_id) == 0) {
+            return 1; 
+        }
+        current = current->next;
+    }
+    
+    return 0; // No match found
+}
+
+void set_client_id(int client_socket, const char *client_id) {
+    struct client_info *current = client_list;
+    
+    while (current != NULL) {
+        if (current->client_socket == client_socket) {
+            strncpy(current->client_id, client_id, sizeof(current->client_id) - 1);
+            current->client_id[sizeof(current->client_id) - 1] = '\0'; // Ensure null termination
+            return;
+        }
+        current = current->next;
+    }
+
+    fprintf(stderr, "Error: Client with socket %d not found in client list.\n", client_socket);
+    exit(1);
+}
+
 int authenticate_user(const char *client_id, const char *password) {
     int num_clients = sizeof(user_cred_list) / sizeof(user_cred_list[0]);
     
@@ -125,6 +154,31 @@ int authenticate_user(const char *client_id, const char *password) {
         }
     }
     return 0; // Authentication failed
+}
+
+void handle_login(int i, const struct message *msg, fd_set *master_ptr) {
+    // check if client_id already exists 
+    if (client_exists((char *) msg->source)) {
+        send_lonak(i, (char *) msg->source, "This client id already exists.");
+        return;
+    }
+    
+    if (authenticate_user((char *)msg->source, (char *)msg->data)) {
+        send_loack(i, (char *) msg->source);
+        // set it's client id 
+        set_client_id(i, (char *) msg->source);
+        print_client_list();
+
+    } else {
+        send_lonak(i, (char *) msg->source, "Either user does not exist or password incorrect.");
+        
+        close(i);
+        FD_CLR(i, master_ptr);
+
+        remove_client(i);
+        printf("Client removed from list due to incorrect authentication.\n");
+        print_client_list();
+    }
 }
 
 /* TODO
@@ -232,9 +286,11 @@ int main(int argc, char *argv[]) {
                 printf("New client connected.\n");
                 print_client_list();
             } else { // client socket activity
-                struct message login_msg;
-                memset(&login_msg, 0, sizeof(login_msg));
-                int nbytes = receive_message(i, &login_msg);
+                struct message msg;
+                memset(&msg, 0, sizeof(msg));
+                int nbytes = receive_message(i, &msg);
+
+                print_message(&msg);
 
                 if (nbytes <= 0) { // either hung up or errored
                     if (nbytes == 0) { // connection closes
@@ -249,14 +305,46 @@ int main(int argc, char *argv[]) {
                     remove_client(i);
                     printf("Client removed from list.\n");
                     print_client_list();
-                } else { // got data from client, for now assume login message
-                    print_message(&login_msg);
-        
-                    if (authenticate_user((char *)login_msg.source, (char *)login_msg.data)) {
-                        send_loack(i, (char *) login_msg.source);
-                    } else {
-                        send_lonak(i, (char *) login_msg.source);
-                    }
+                } else { // got data from client
+
+                    switch (msg.type) {
+                        case LOGIN:
+                            handle_login(i, &msg, &master);
+                            break;
+                        case EXIT:
+                            // printf("Client %s requested EXIT.\n", msg.source);
+                            // handle_exit(i);
+                            break;
+                
+                        case JOIN:
+                            // printf("Client %s requested to JOIN session: %s\n", msg.source, msg.data);
+                            // handle_join(i, &msg);
+                            break;
+                
+                        case LEAVE_SESS:
+                            // printf("Client %s requested to LEAVE session.\n", msg.source);
+                            // handle_leave(i);
+                            break;
+                
+                        case NEW_SESS:
+                            // printf("Client %s requested to CREATE a new session.\n", msg.source);
+                            // handle_new_session(i, &msg);
+                            break;
+                
+                        case MESSAGE:
+                            // printf("Client %s sent a MESSAGE.\n", msg.source);
+                            // handle_message(i, &msg);
+                            break;
+                
+                        case QUERY:
+                            // printf("Client %s requested QUERY.\n", msg.source);
+                            // handle_query(i);
+                            break;
+                
+                        default:
+                            printf("Unknown message type received: %d\n", msg.type);
+                            break;
+                    }                
                 }
 
             }

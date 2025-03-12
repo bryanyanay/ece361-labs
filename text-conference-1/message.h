@@ -38,7 +38,7 @@ int receive_message(int sock, struct message *msg);
 void print_message(const struct message *msg);
 
 void send_loack(int sock, const char *client_id);
-void send_lonak(int sock, const char *client_id);
+void send_lonak(int sock, const char *client_id, const char *data);
 void send_login(int sock, const char *client_id, const char *password);
 
 #endif

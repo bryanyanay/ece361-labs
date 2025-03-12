@@ -100,7 +100,7 @@ void send_loack(int sock, const char *client_id) {
     }
 }
 
-void send_lonak(int sock, const char *client_id) {
+void send_lonak(int sock, const char *client_id, const char *data) {
     struct message lonak_msg;
     memset(&lonak_msg, 0, sizeof(lonak_msg));
 
@@ -109,7 +109,7 @@ void send_lonak(int sock, const char *client_id) {
     strncpy((char *)lonak_msg.source, client_id, MAX_NAME - 1);
     lonak_msg.source[MAX_NAME - 1] = '\0';
 
-    strcpy((char *)lonak_msg.data, "Either user does not exist or password incorrect.");
+    strcpy((char *)lonak_msg.data, data);
 
     lonak_msg.size = strlen((char *)lonak_msg.source) + strlen((char *)lonak_msg.data);
 
