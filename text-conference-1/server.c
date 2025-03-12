@@ -11,23 +11,129 @@ struct user_cred {
     char password[MAX_DATA];
 };
 
-struct user_cred user_list[] = {
+struct user_cred user_cred_list[] = {
     {"bryan", "hello123"},
     {"fu", "pass123"},
     {"bob", "mysecret"},
 };
 
+struct client_info {
+    int client_socket;
+    char client_id[MAX_NAME];
+    struct sockaddr_in client_address;  // IP and port
+    char session_id[MAX_NAME];          // note that we use MAX_NAME for session_id too
+    struct client_info *next;           // linked list
+};
+
+struct client_info *client_list = NULL;
+
+void add_client(int client_socket, const char *client_id, struct sockaddr_in *client_address, const char *session_id) {
+    // dynamically allocate new client
+    struct client_info *new_client = malloc(sizeof(struct client_info));
+    if (new_client == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed for new client_info\n");
+        exit(1);
+    }
+
+    new_client->client_socket = client_socket;
+    strcpy(new_client->client_id, client_id);
+    memcpy(&new_client->client_address, client_address, sizeof(struct sockaddr_in));
+    strcpy(new_client->session_id, session_id);
+    new_client->next = NULL;
+
+    // add to linked list
+    if (client_list == NULL) { // first client in the list
+        client_list = new_client;  
+    } else {
+        struct client_info *current = client_list;
+        while (current->next != NULL) {
+            current = current->next;  
+        }
+        current->next = new_client;  
+    }
+}
+
+void remove_client(int client_socket) {
+    struct client_info *current = client_list;
+    struct client_info *previous = NULL;
+
+    while (current != NULL) {
+        if (current->client_socket == client_socket) {
+            if (previous == NULL) { // removing the head
+                client_list = current->next;  
+            } else {
+                previous->next = current->next;  
+            }
+            free(current);  
+            return;
+        }
+        previous = current;
+        current = current->next;
+    }
+
+    // if we reach end
+    fprintf(stderr, "Error: client to remove not found\n");
+    exit(1);
+}
+
+void print_client_list() {
+    struct client_info *current = client_list;  
+    
+    if (current == NULL) {
+        printf("No clients connected.\n");
+        return;
+    }
+
+    printf("--------------------------\n");
+    printf("CURRENT CLIENTS:\n");
+    printf("--------------------------\n");
+
+    while (current != NULL) {
+        char ip_address[INET_ADDRSTRLEN];  
+        
+        inet_ntop(AF_INET, &current->client_address.sin_addr, ip_address, INET_ADDRSTRLEN);
+        
+        printf("Socket FD: %d\n", current->client_socket);
+        printf("Client ID: %s\n", current->client_id);
+        printf("Session ID: %s\n", current->session_id);
+        printf("IP Address: %s\n", ip_address);
+        printf("Port: %d\n", ntohs(current->client_address.sin_port));  
+        printf("--------------------------\n");
+        
+        current = current->next;  
+    }
+}
+
+int is_session_empty(const char *session_id) { // not sure if we'll need this
+    struct client_info *current = client_list;
+    while (current != NULL) {
+        if (strcmp(current->session_id, session_id) == 0) { // session not empty
+            return 0;  
+        }
+        current = current->next;
+    }
+    return 1;  // session empty
+}
+
 int authenticate_user(const char *client_id, const char *password) {
-    int num_clients = sizeof(user_list) / sizeof(user_list[0]);
+    int num_clients = sizeof(user_cred_list) / sizeof(user_cred_list[0]);
     
     for (int i = 0; i < num_clients; i++) {
-        if (strcmp(user_list[i].client_id, client_id) == 0 && 
-            strcmp(user_list[i].password, password) == 0) {
+        if (strcmp(user_cred_list[i].client_id, client_id) == 0 && 
+            strcmp(user_cred_list[i].password, password) == 0) {
             return 1; // Authentication successful
         }
     }
     return 0; // Authentication failed
 }
+
+/* TODO
+if client tries login but fails, then we should immediately remove it from client list and kill it's connection
+if client already has authenticated, prevent another connection with same client id
+when we get login message, remember to update the clientid in the client list
+
+
+*/
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -35,8 +141,14 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    fd_set master; 
+    fd_set read_fds;
+    FD_ZERO(&master);    
+    FD_ZERO(&read_fds);
+    int fdmax;
+
     // bind the TCP port
-    int listener_fd, new_socket;
+    int listener_fd;
     struct addrinfo hints, *ai_head, *ai_curr;
 
     int port = atoi(argv[1]);
@@ -82,24 +194,72 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    FD_SET(listener_fd, &master); // add it to the set
+    fdmax = listener_fd;
+
     printf(">>> Server now listening on port %d\n", port);
 
+
+    struct sockaddr_storage remoteaddr; // the client's address
+
     while (1) {
-        if ((new_socket = accept(listener_fd, NULL, NULL)) == -1) {
-            perror("accept");
+        read_fds = master;
+        if (select(fdmax + 1, &read_fds, NULL, NULL, NULL) == -1) { // block until one is ready to read
+            perror("select");
             exit(1);
         }
-        printf("New client connected.\n");
 
-        struct message login_msg;
-        memset(&login_msg, 0, sizeof(login_msg));
-        receive_message(new_socket, &login_msg);
-        print_message(&login_msg);
+        for (int i = 0; i <= fdmax; i++) {
+            if (!FD_ISSET(i, &read_fds)) {
+                continue;
+            }
 
-        if (authenticate_user((char *)login_msg.source, (char *)login_msg.data)) {
-            send_loack(new_socket, (char *) login_msg.source);
-        } else {
-            send_lonak(new_socket, (char *) login_msg.source);
+            if (i == listener_fd) { // new client
+                socklen_t addrlen = sizeof remoteaddr;
+                int newfd = accept(listener_fd, (struct sockaddr *) &remoteaddr, &addrlen);
+
+                if (newfd == -1) {
+                    perror("accept");
+                    exit(1);
+                } 
+
+                FD_SET(newfd, &master);
+                if (newfd > fdmax) {  
+                    fdmax = newfd;
+                }
+
+                add_client(newfd, "", (struct sockaddr_in *) &remoteaddr, "");
+                printf("New client connected.\n");
+                print_client_list();
+            } else { // client socket activity
+                struct message login_msg;
+                memset(&login_msg, 0, sizeof(login_msg));
+                int nbytes = receive_message(i, &login_msg);
+
+                if (nbytes <= 0) { // either hung up or errored
+                    if (nbytes == 0) { // connection closes
+                        printf("Client with fd %d hung up.", i);
+                    } else {
+                        fprintf(stderr, "Failed to receive client data.\n");
+                        exit(1);
+                    }
+                    close(i);
+                    FD_CLR(i, &master);
+
+                    remove_client(i);
+                    printf("Client removed from list.\n");
+                    print_client_list();
+                } else { // got data from client, for now assume login message
+                    print_message(&login_msg);
+        
+                    if (authenticate_user((char *)login_msg.source, (char *)login_msg.data)) {
+                        send_loack(i, (char *) login_msg.source);
+                    } else {
+                        send_lonak(i, (char *) login_msg.source);
+                    }
+                }
+
+            }
         }
 
     }

@@ -55,10 +55,11 @@ int receive_message(int sock, struct message *msg) {
     // the header is "type:size:" with no terminating null char
     int expected_header_bytes = 4 + 4 + 2;
     ssize_t header_bytes = recv_all(sock, buffer, expected_header_bytes); // WE COULD'VE GOTTEN MORE THAN JUST HEADER
-    if (header_bytes <= 0) {
-        fprintf(stderr, "recv_all failed in receive_message\n");
-        exit(1);
-    }
+    // if (header_bytes <= 0) {
+    //     fprintf(stderr, "recv_all failed in receive_message\n");
+    //     exit(1);
+    // }
+    if (header_bytes <= 0) return header_bytes;  
 
     unsigned int type, size;
     if (sscanf(buffer, "%d:%d:", &type, &size) != 2) {
@@ -70,10 +71,11 @@ int receive_message(int sock, struct message *msg) {
     int expected_body_bytes = size + 2; // add 2, one for the colon, one for terminating null
 
     ssize_t body_bytes = recv_all(sock, buffer + header_bytes, expected_body_bytes);
-    if (body_bytes <= 0) {
-        fprintf(stderr, "recv_all failed in receive_message\n");
-        exit(1);
-    }
+    // if (body_bytes <= 0) {
+    //     fprintf(stderr, "recv_all failed in receive_message\n");
+    //     exit(1);
+    // }
+    if (body_bytes <= 0) return body_bytes;  
 
     deserialize_message(buffer, msg);
     return 1; // Success

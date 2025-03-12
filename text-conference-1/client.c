@@ -63,8 +63,13 @@ int main() {
             // receive the login ack, and report the result to user
             struct message response;
             memset(&response, 0, sizeof(response));
-            receive_message(client_socket, &response);
+            if (receive_message(client_socket, &response) <= 0) {
+                fprintf(stderr, "Failed to receive login ack.\n");
+                exit(1);
+            }
+
             print_message(&response);
+
         } else if (strncmp(user_input, "/logout", 7) == 0) {
             // send_message(EXIT, "");
             // close(client_socket);
