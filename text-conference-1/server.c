@@ -142,7 +142,7 @@ void set_client_id(int client_socket, const char *client_id) {
         current = current->next;
     }
 
-    fprintf(stderr, "Error: Client with socket %d not found in client list.\n", client_socket);
+    fprintf(stderr, "Error: Client with socket %d not found, in set_client_id.\n", client_socket);
     exit(1);
 }
 
@@ -188,6 +188,23 @@ void handle_login(int i, const struct message *msg, fd_set *master_ptr) {
         remove_conn(i, master_ptr);
     }
 }
+
+void set_client_session(int client_socket, const char *session_id) {
+    struct client_info *current = client_list;
+
+    while (current != NULL) {
+        if (current->client_socket == client_socket) {
+            strncpy(current->session_id, session_id, sizeof(current->session_id) - 1);
+            current->session_id[sizeof(current->session_id) - 1] = '\0'; 
+            return;
+        }
+        current = current->next;
+    }
+
+    fprintf(stderr, "Error: Client with socket %d not found, in set_client_session.\n", client_socket);
+    exit(1);
+}
+
 
 /* TODO
 if client tries login but fails, then we should immediately remove it from client list and kill it's connection
@@ -328,8 +345,10 @@ int main(int argc, char *argv[]) {
                             break;
                 
                         case NEW_SESS:
-                            // printf("Client %s requested to CREATE a new session.\n", msg.source);
-                            // handle_new_session(i, &msg);
+                            printf("Client requested to (create +) join session: %s\n", (char *) msg.data);
+                            set_client_session(i, (char *) msg.data);
+                            print_client_list();
+                            send_newsessack(i, (char *) msg.source);
                             break;
                 
                         case MESSAGE:

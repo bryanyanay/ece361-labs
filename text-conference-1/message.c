@@ -157,3 +157,120 @@ void send_exit(int sock, const char *client_id) {
         exit(1);
     }
 }
+
+void send_join(int sock, const char *client_id, const char *session_id) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = JOIN;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    strncpy((char *)msg.data, session_id, MAX_DATA - 1);
+    msg.data[MAX_DATA - 1] = '\0';
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send join message.\n");
+        exit(1);
+    }
+}
+
+void send_joinack(int sock, const char *client_id, const char *session_id) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = JN_ACK;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    strncpy((char *)msg.data, session_id, MAX_DATA - 1);
+    msg.data[MAX_DATA - 1] = '\0';
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send join ack message.\n");
+        exit(1);
+    }
+}
+
+void send_joinnak(int sock, const char *client_id, const char *session_id, const char *reason) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = JN_NAK;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    snprintf((char *)msg.data, MAX_DATA, "%s, %s", session_id, reason);
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send join nak message.\n");
+        exit(1);
+    }
+}
+
+void send_leavesess(int sock, const char *client_id) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = LEAVE_SESS;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    msg.data[0] = '\0';
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send leave session message.\n");
+        exit(1);
+    }
+}
+
+void send_newsess(int sock, const char *client_id, const char *session_id) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = NEW_SESS;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    strncpy((char *)msg.data, session_id, MAX_DATA - 1);
+    msg.data[MAX_DATA - 1] = '\0';
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send new session message.\n");
+        exit(1);
+    }
+}
+
+void send_newsessack(int sock, const char *client_id) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = NS_ACK;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    msg.data[0] = '\0';
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send new session ack message.\n");
+        exit(1);
+    }
+}
