@@ -358,10 +358,14 @@ int main(int argc, char *argv[]) {
                                 char entry[MAX_NAME + MAX_NAME + 10];
 
                                 // Copy their user and session (if in a session)
-                                if (strlen(current->session_id) > 0) {
-                                    snprintf(entry, sizeof(entry), "%s (Session: %s)\n", current->client_id, current->session_id);
-                                } else {
-                                    snprintf(entry, sizeof(entry), "%s (No session)\n", current->client_id);
+                                if (strlen(current->client_id) > 0) {
+
+                                    if (strlen(current->session_id) > 0) {
+                                        snprintf(entry, sizeof(entry), "%s (Session: %s)\n", current->client_id, current->session_id);
+                                    } else {
+                                        snprintf(entry, sizeof(entry), "%s (No session)\n", current->client_id);
+                                    }
+
                                 }
 
                                 // Add it to the list
