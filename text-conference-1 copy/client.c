@@ -90,6 +90,44 @@ int main() {
             // close(client_socket);
             // printf("Logged out.\n");
         } else if (strncmp(user_input, "/joinsession", 12) == 0) {
+
+            // Make sure user is logged in
+            if (!logged_in) {
+                printf("You must be logged in to join a session.\n");
+                continue;
+            }
+
+            // Check if user is already in a session
+            if (in_session) {
+                printf("Already in session %s, leave it first.\n", session_id);
+                continue;
+            }
+
+            // Grab the session id user wants to join
+            if (sscanf(user_input, "/joinsession %s", session_id) != 1) {
+                printf("Please make sure format is: /joinsession <session-id>\n");
+                continue;
+            }
+
+            // Send thingy to server
+            struct message response;
+            memset(&response, 0, sizeof(response));
+            if (receive_message(client_socket, &response) <= 0) {
+                fprintf(stderr, "Failed to receive session join response.\n");
+                continue;
+            }
+
+            // Deal with response
+            if (response.type == JN_ACK) {
+                in_session = 1;
+                printf("Successfully joined session: %s\n", session_id);
+            } else if (response.type == JN_NAK) {
+                printf("Error joining session: %s\n", response.data);
+            } else {
+                printf("Unexpected response type:\n");
+                print_message(&response);
+            }
+
             // char session_id[MAX_NAME];
             // sscanf(command, "/joinsession %s", session_id);
             // send_message(JOIN, session_id);

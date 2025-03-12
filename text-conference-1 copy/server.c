@@ -322,6 +322,41 @@ int main(int argc, char *argv[]) {
                             break;
                 
                         case JOIN:
+
+                            // Print msg
+                            printf("Client %s requested to JOIN session: %s\n", msg.source, msg.data);
+
+                            // Check session exists by looping through existing sessions
+                            int session_found = 0;
+                            struct client_info *current = client_list;
+
+                            while (current != NULL) {
+                                
+                                // Check session id
+                                if (strcmp(current->session_id, msg.data) == 0) {
+                                    session_found = 1;
+                                    break;
+                                }
+
+                                // ff 15 go next
+                                current = current->next;
+                            }
+
+                            // Deal with whether or not found (send ACK or NACK)
+                            if (!session_found) {
+                                // Not found
+                                send_joinnak(i, msg.source, msg.data, "Session does not exist.");
+                            } else {
+                                // Found
+                                // Assign the client to session
+                                set_client_session(i, msg.data);
+                                printf("Client %s joined session %s.\n", msg.source, msg.data);
+                                print_client_list();
+                                
+                                // Send ACK response to client
+                                send_joinack(i, msg.source, msg.data);  
+                            }
+
                             // printf("Client %s requested to JOIN session: %s\n", msg.source, msg.data);
                             // handle_join(i, &msg);
                             break;
