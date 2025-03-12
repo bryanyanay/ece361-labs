@@ -100,6 +100,31 @@ int main() {
             // sscanf(command, "/createsession %s", session_id);
             // send_message(NEW_SESS, session_id);
         } else if (strncmp(user_input, "/list", 5) == 0) {
+
+            if (!logged_in) {
+                printf("You must be logged in to use this command.\n");
+                continue;
+            }
+
+            // Send the QUERY message to server
+            send_message(client_socket, QUERY, client_id, "");
+
+            // Wait to recieve QU_ACK from server
+            struct message response;
+            memset(&response, 0, sizeof(response));
+            if (receive_message(client_socket, &response) <= 0) {
+                fprintf(stderr, "Failed to receive list response.\n");
+                continue;
+            }
+
+            // Response now successfully recieved
+            // Display the list of users and sessions
+            if (response.type == QU_ACK) {
+                printf("Online Users and Active Sessions:\n%s\n", response.data);
+            } else {
+                printf("Error retrieving list.\n");
+            }
+
             // send_message(QUERY, "");
         } else if (strncmp(user_input, "/quit", 5) == 0) {
 

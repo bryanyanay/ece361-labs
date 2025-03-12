@@ -342,6 +342,43 @@ int main(int argc, char *argv[]) {
                             break;
                 
                         case QUERY:
+
+                            // Print message
+                            printf("Client %s requested QUERY.\n", msg.source);
+
+                            // Create the user list message
+                            char user_list[MAX_DATA] = "Users and their Sessions:\n";
+
+                            // Loop the client_list
+                            struct client_info *current = client_list;
+
+                            while (current != NULL) {
+                                
+                                // Create an entry for each user
+                                char entry[MAX_NAME + MAX_NAME + 10];
+
+                                // Copy their user and session (if in a session)
+                                if (strlen(current->session_id) > 0) {
+                                    snprintf(entry, sizeof(entry), "%s (Session: %s)\n", current->client_id, current->session_id);
+                                } else {
+                                    snprintf(entry, sizeof(entry), "%s (No session)\n", current->client_id);
+                                }
+
+                                // Add it to the list
+                                strcat(user_list, entry);
+
+                                current = current->next;
+
+                            }
+
+                            // In case no users, (shouldn't be since need to login to use cmd)
+                            if (strlen(user_list) == 0) {
+                                strcpy(user_list, "No users are currently online.\n");
+                            }
+
+                            // Now send the message and pray
+                            send_message(i, QU_ACK, "server", user_list);
+                            
                             // printf("Client %s requested QUERY.\n", msg.source);
                             // handle_query(i);
                             break;
