@@ -85,10 +85,15 @@ int main() {
                 printf("Error: %s\n", (char *) response.data);
             }
         } else if (strncmp(user_input, "/logout", 7) == 0) {
-            
-            // send_message(EXIT, "");
-            // close(client_socket);
-            // printf("Logged out.\n");
+            if (!logged_in) {
+                printf("You are not logged in yet.\n");
+                printf(">>> ");
+                continue;
+            }
+            send_exit(client_socket, client_id);
+            printf("Logged out of server.\n");
+            close(client_socket);
+            logged_in = 0;
         } else if (strncmp(user_input, "/joinsession", 12) == 0) {
             // char session_id[MAX_NAME];
             // sscanf(command, "/joinsession %s", session_id);
