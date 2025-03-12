@@ -315,10 +315,8 @@ int main(int argc, char *argv[]) {
                             handle_login(i, &msg, &master);
                             break;
                         case EXIT:
-                            // printf("Client %s requested EXIT.\n", msg.source);
-                            // handle_exit(i);
-                            break;
-                
+                            remove_conn(i, &master);
+                            break;                
                         case JOIN:
                             // printf("Client %s requested to JOIN session: %s\n", msg.source, msg.data);
                             // handle_join(i, &msg);

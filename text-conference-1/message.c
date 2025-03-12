@@ -139,3 +139,21 @@ void send_login(int sock, const char *client_id, const char *password) {
     }
 }
 
+void send_exit(int sock, const char *client_id) {
+    struct message exit_msg;
+    memset(&exit_msg, 0, sizeof(exit_msg));
+
+    exit_msg.type = EXIT;
+
+    strncpy((char *)exit_msg.source, client_id, MAX_NAME - 1);
+    exit_msg.source[MAX_NAME - 1] = '\0';
+
+    exit_msg.data[0] = '\0';
+
+    exit_msg.size = strlen((char *)exit_msg.source) + strlen((char *)exit_msg.data);
+
+    if (send_message(sock, &exit_msg) < 0) {
+        fprintf(stderr, "Failed to send exit message.\n");
+        exit(1);
+    }
+}
