@@ -16,5 +16,7 @@ make sure to enter the client_dir and server_dir directories before running the 
 /login bob mysecret 127.0.0.1 8000
 
 
+/login bryan hello123 128.100.13.146 8000
+/login fu pass123 128.100.13.146 8000
 
 netstat -tuln
