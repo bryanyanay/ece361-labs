@@ -3,36 +3,36 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include "message.h"
 
-#define MAX_NAME 32 // max length of client id
-#define MAX_DATA 256 // max length of data being sent in packet
-
-typedef enum {
-    LOGIN, LO_ACK, LO_NAK,
-    EXIT, JOIN, JN_ACK, JN_NAK,
-    LEAVE_SESS, NEW_SESS, NS_ACK,
-    MESSAGE, QUERY, QU_ACK
-} message_type;
-
-struct message {
-    unsigned int type;
-    unsigned int size;
-    unsigned char source[MAX_NAME];
-    unsigned char data[MAX_DATA];
+struct user_cred {
+    char client_id[MAX_NAME];
+    char password[MAX_DATA];
 };
 
-void serialize_message(struct message *msg, char *buffer) {
-    sprintf(buffer, "%u:%u:%s:%s", msg->type, msg->size, msg->source, msg->data);
-}
+struct user_cred user_list[] = {
+    {"bryan", "hello123"},
+    {"fu", "pass123"},
+    {"bob", "mysecret"},
+};
 
-void deserialize_message(char *buffer, struct message *msg) {
-    sscanf(buffer, "%u:%u:%[^:]:%[^\n]", &msg->type, &msg->size, msg->source, msg->data);
+int authenticate_user(const char *client_id, const char *password) {
+    int num_clients = sizeof(user_list) / sizeof(user_list[0]);
+    
+    for (int i = 0; i < num_clients; i++) {
+        if (strcmp(user_list[i].client_id, client_id) == 0 && 
+            strcmp(user_list[i].password, password) == 0) {
+            return 1; // Authentication successful
+        }
+    }
+    return 0; // Authentication failed
 }
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <port>\n", argv[0]);
-        exit(EXIT_FAILURE);
+        exit(1);
     }
 
     // bind the TCP port
@@ -82,12 +82,26 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    printf(">>> Server now listening on port %d\n", port);
+
     while (1) {
         if ((new_socket = accept(listener_fd, NULL, NULL)) == -1) {
             perror("accept");
             exit(1);
         }
         printf("New client connected.\n");
+
+        struct message login_msg;
+        memset(&login_msg, 0, sizeof(login_msg));
+        receive_message(new_socket, &login_msg);
+        print_message(&login_msg);
+
+        if (authenticate_user((char *)login_msg.source, (char *)login_msg.data)) {
+            send_loack(new_socket, (char *) login_msg.source);
+        } else {
+            send_lonak(new_socket, (char *) login_msg.source);
+        }
+
     }
 
     return 0;

@@ -1,10 +1,19 @@
-all: client server
+CC = gcc
+CFLAGS = -Wall -Wextra -g
+SRC = client.c server.c message.c
+OBJ = $(SRC:.c=.o)
+TARGETS = client server
 
-client: client.c
-	gcc -o client client.c
+all: $(TARGETS)
 
-server: server.c
-	gcc -o server server.c
+client: client.o message.o
+	$(CC) $(CFLAGS) -o client client.o message.o
+
+server: server.o message.o
+	$(CC) $(CFLAGS) -o server server.o message.o
+
+%.o: %.c message.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f client server
+	rm -f $(TARGETS) *.o
