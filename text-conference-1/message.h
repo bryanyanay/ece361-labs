@@ -42,4 +42,11 @@ void send_lonak(int sock, const char *client_id, const char *data);
 void send_login(int sock, const char *client_id, const char *password);
 void send_exit(int sock, const char *client_id);
 
+void send_join(int sock, const char *client_id, const char *session_id);
+void send_joinack(int sock, const char *client_id, const char *session_id);
+void send_joinnak(int sock, const char *client_id, const char *session_id, const char *reason); // gotta test this
+void send_leavesess(int sock, const char *client_id);
+void send_newsess(int sock, const char *client_id, const char *session_id);
+void send_newsessack(int sock, const char *client_id);
+
 #endif
