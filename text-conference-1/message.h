@@ -20,7 +20,7 @@ typedef enum {
     LOGIN, LO_ACK, LO_NAK,
     EXIT, JOIN, JN_ACK, JN_NAK,
     LEAVE_SESS, NEW_SESS, NS_ACK,
-    MESSAGE, QUERY, QU_ACK
+    MESSAGE, QUERY, QU_ACK, GET_MSG
 } message_type;
 
 struct message {
@@ -48,5 +48,9 @@ void send_joinnak(int sock, const char *client_id, const char *session_id, const
 void send_leavesess(int sock, const char *client_id);
 void send_newsess(int sock, const char *client_id, const char *session_id);
 void send_newsessack(int sock, const char *client_id);
+void send_query(int sock, const char *client_id);
+void send_quack(int sock, const char *client_id, const char *user_list);
+void send_usermsg(int sock, const char *client_id, const char *msgdata);
+void send_getmsg(int sock, const char *client_id);
 
 #endif

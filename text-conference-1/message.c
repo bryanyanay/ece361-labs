@@ -274,3 +274,81 @@ void send_newsessack(int sock, const char *client_id) {
         exit(1);
     }
 }
+
+void send_query(int sock, const char *client_id) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = QUERY;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    msg.data[0] = '\0';
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send new query message.\n");
+        exit(1);
+    }
+}
+
+void send_quack(int sock, const char *client_id, const char *user_list) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = QU_ACK;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    strncpy((char *)msg.data, user_list, MAX_DATA - 1);
+    msg.data[MAX_DATA - 1] = '\0';
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send new qu_ack message.\n");
+        exit(1);
+    }
+}
+
+void send_usermsg(int sock, const char *client_id, const char *msgdata) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = MESSAGE;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    strncpy((char *)msg.data, msgdata, MAX_DATA - 1);
+    msg.data[MAX_DATA - 1] = '\0';
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send user message.\n");
+        exit(1);
+    }
+}
+
+void send_getmsg(int sock, const char *client_id) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = GET_MSG;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    msg.data[0] = '\0';
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send get message.\n");
+        exit(1);
+    }
+}

@@ -5,6 +5,8 @@
 #include <arpa/inet.h>
 #include "message.h"
 
+#include <pthread.h>
+
 char client_id[MAX_NAME];
 char session_id[MAX_NAME];
 int client_socket;
@@ -15,23 +17,55 @@ void remove_newline(char *str) {
     str[strcspn(str, "\n")] = '\0';
 }
 
-// void login() {
+pthread_mutex_t lock;
+int polling_active = 0;
+pthread_t poll_thread;
 
-// }
+void *poll_messages(/*void *arg*/) {
+    while (polling_active) {
+        pthread_mutex_lock(&lock);
+        if (in_session) {
+            send_getmsg(client_socket, client_id);
+            struct message response;
+            memset(&response, 0, sizeof(response));
+            if (receive_message(client_socket, &response) > 0) {
+                if (response.type == MESSAGE) {
+                    if (strlen((char *)response.data) > 0) {
+                        printf("\nReceived message: %s\n>>> ", response.data);
+                        fflush(stdout);
+                    }
+                }
+            }
+        }
+        pthread_mutex_unlock(&lock);
+        sleep(3);
+    }
+    return NULL;
+}
 
+void start_polling() {
+    polling_active = 1;
+    pthread_create(&poll_thread, NULL, poll_messages, NULL);
+}
+
+void stop_polling() {
+    polling_active = 0;
+    pthread_join(poll_thread, NULL);
+}
 
 int main() {
 
-
-
     char user_input[USER_INPUT_MAX_SIZE];
     logged_in = 0;
+
+    pthread_mutex_init(&lock, NULL);
 
     printf(">>> ");
 
     while (fgets(user_input, USER_INPUT_MAX_SIZE, stdin)) {
         remove_newline(user_input);
-        // printf("User inputted: %s\n", user_input);
+        pthread_mutex_lock(&lock);
+
         if (strncmp(user_input, "/login", 6) == 0) {
             char server_ip[INET_ADDRSTRLEN];
             int server_port;
@@ -99,12 +133,59 @@ int main() {
             printf("Logged out of server.\n");
             close(client_socket);
             logged_in = 0;
+            in_session = 0;
+            if (in_session) {
+                pthread_mutex_unlock(&lock);
+                stop_polling();
+            }
         } else if (strncmp(user_input, "/joinsession", 12) == 0) {
-            // char session_id[MAX_NAME];
-            // sscanf(command, "/joinsession %s", session_id);
-            // send_message(JOIN, session_id);
+            if (!logged_in) {
+                printf("You must be logged in to join a session.\n");
+                printf(">>> ");
+                continue;
+            }
+            if (in_session) {
+                printf("Already in session %s, leave it first.\n", session_id);
+                printf(">>> ");
+                continue;
+            }
+            if (sscanf(user_input, "/joinsession %s", session_id) != 1) {
+                printf("Please make sure format is: /joinsession <session-id>\n");
+                printf(">>> ");
+                continue;
+            }
+
+            // printf("before join");
+            send_join(client_socket, client_id, session_id);
+            // printf("after join");
+
+            struct message response;
+            memset(&response, 0, sizeof(response));
+            if (receive_message(client_socket, &response) <= 0) {
+                fprintf(stderr, "Failed to receive session join response.\n");
+                exit(1);
+            }
+
+            if (response.type == JN_ACK) {
+                in_session = 1;
+                printf("Successfully joined session: %s\n", session_id);
+                start_polling();
+            } else if (response.type == JN_NAK) {
+                printf("Error joining session: %s\n", response.data);
+            } else {
+                printf("Unexpected response type:\n");
+                print_message(&response);
+            }
         } else if (strncmp(user_input, "/leavesession", 13) == 0) {
-            // send_message(LEAVE_SESS, "");
+            if (!in_session) {
+                printf("You are not in a session yet.\n");
+                printf(">>> ");
+                continue;
+            }
+            send_leavesess(client_socket, client_id);
+            in_session = 0;
+            pthread_mutex_unlock(&lock);
+            stop_polling();
         } else if (strncmp(user_input, "/createsession", 14) == 0) {
             if (!logged_in) {
                 printf("You are not logged in yet.\n");
@@ -136,21 +217,61 @@ int main() {
             if (response.type == NS_ACK) {
                 in_session = 1;
                 printf("Successfully (created and) joined session %s.\n", session_id);
+                start_polling();
             } else {
                 printf("Received incorrect response type:\n");
                 print_message(&response);
             }
         } else if (strncmp(user_input, "/list", 5) == 0) {
-            // send_message(QUERY, "");
+            if (!logged_in) {
+                printf("You must be logged in to use this command.\n");
+                printf(">>> ");
+                continue;
+            }
+
+            send_query(client_socket, client_id);
+
+            struct message response;
+            memset(&response, 0, sizeof(response));
+            if (receive_message(client_socket, &response) <= 0) {
+                fprintf(stderr, "Failed to receive list response.\n");
+                exit(1);
+            }
+
+            if (response.type == QU_ACK) {
+                printf("%s\n", response.data);
+            } else {
+                printf("Received incorrect response type:\n");
+                print_message(&response);
+            }
         } else if (strncmp(user_input, "/quit", 5) == 0) {
-            // send_message(EXIT, "");
-            // close(client_socket);
-            // printf("Client exiting.\n");
-            // exit(0);
+            if (logged_in) {
+                send_exit(client_socket, client_id);
+                printf("Logged out of server.\n");
+                close(client_socket);
+                logged_in = 0;
+                in_session = 0;
+            }
+            if (in_session) {
+                pthread_mutex_unlock(&lock);
+                stop_polling();
+            }
+            exit(0);
         } else {
-            // send_message(MESSAGE, command);
+            if (!logged_in) {
+                printf("You must be logged in to use this command.\n");
+                printf(">>> ");
+                continue;
+            }
+            if (!in_session) {
+                printf("Not in session yet.\n");
+                printf(">>> ");
+                continue;
+            }
+            send_usermsg(client_socket, client_id, user_input);
         }
         printf(">>> ");
+        pthread_mutex_unlock(&lock);
     }
 
     return 0;

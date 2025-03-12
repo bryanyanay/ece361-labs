@@ -23,6 +23,7 @@ struct client_info {
     struct sockaddr_in client_address;  // IP and port
     char session_id[MAX_NAME];          // note that we use MAX_NAME for session_id too
     struct client_info *next;           // linked list
+    char backlog[MAX_DATA];
 };
 
 struct client_info *client_list = NULL;
@@ -40,6 +41,7 @@ void add_client(int client_socket, const char *client_id, struct sockaddr_in *cl
     memcpy(&new_client->client_address, client_address, sizeof(struct sockaddr_in));
     strcpy(new_client->session_id, session_id);
     new_client->next = NULL;
+    new_client->backlog[0] = '\0';
 
     // add to linked list
     if (client_list == NULL) { // first client in the list
@@ -106,15 +108,15 @@ void print_client_list() {
     }
 }
 
-int is_session_empty(const char *session_id) { // not sure if we'll need this
+int session_exists(const char *session_id) { 
     struct client_info *current = client_list;
     while (current != NULL) {
         if (strcmp(current->session_id, session_id) == 0) { // session not empty
-            return 0;  
+            return 1;  
         }
         current = current->next;
     }
-    return 1;  // session empty
+    return 0;  // session empty
 }
 
 int client_exists(const char *client_id) {
@@ -205,14 +207,62 @@ void set_client_session(int client_socket, const char *session_id) {
     exit(1);
 }
 
-
-/* TODO
-if client tries login but fails, then we should immediately remove it from client list and kill it's connection
-if client already has authenticated, prevent another connection with same client id
-when we get login message, remember to update the clientid in the client list
+void send_to_session(const char *session_id, int sender_sock, const char *msgdata) {
+    struct client_info *current = client_list;
 
 
-*/
+    while (current != NULL) {
+        if (strcmp(current->session_id, session_id) == 0 && current->client_socket != sender_sock) { 
+            strcat(current->backlog, msgdata);
+            strcat(current->backlog, "\n");
+        }
+        current = current->next;
+    }
+}
+
+const char *get_client_session(int client_socket) {
+    struct client_info *current = client_list;
+
+    while (current != NULL) {
+        if (current->client_socket == client_socket) {
+            return current->session_id;
+        }
+        current = current->next;
+    }
+
+    fprintf(stderr, "Error: Client with socket %d not found, in get_client_session.\n", client_socket);
+    exit(1);  
+}
+
+const char *get_client_backlog(int client_socket) {
+    struct client_info *current = client_list;
+
+    while (current != NULL) {
+        if (current->client_socket == client_socket) {
+            return current->backlog;
+        }
+        current = current->next;
+    }
+
+    fprintf(stderr, "Error: Client with socket %d not found, in get_client_session.\n", client_socket);
+    exit(1);  
+}
+
+void delete_client_backlog(int client_socket) {
+    struct client_info *current = client_list;
+
+    while (current != NULL) {
+        if (current->client_socket == client_socket) {
+            current->backlog[0] = '\0';
+            return;
+        }
+        current = current->next;
+    }
+
+    fprintf(stderr, "Error: Client with socket %d not found, in delete_client_backlog.\n", client_socket);
+    exit(1);  
+}
+
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -335,15 +385,22 @@ int main(int argc, char *argv[]) {
                             remove_conn(i, &master);
                             break;                
                         case JOIN:
-                            // printf("Client %s requested to JOIN session: %s\n", msg.source, msg.data);
-                            // handle_join(i, &msg);
+                            printf("Client %s requested to JOIN session: %s\n", msg.source, msg.data);
+
+                            if (!session_exists((char *) msg.data)) {
+                                send_joinnak(i, (char *) msg.source, (char *) msg.data, "Session does not exist.");
+                            } else {
+                                set_client_session(i, (char *) msg.data);
+                                print_client_list();
+                                send_joinack(i, (char *) msg.source, (char*) msg.data);  
+                            }
                             break;
                 
                         case LEAVE_SESS:
-                            // printf("Client %s requested to LEAVE session.\n", msg.source);
-                            // handle_leave(i);
+                            printf("Client %s requested to leave session.\n", (char *) msg.source);
+                            set_client_session(i, "");
+                            print_client_list();
                             break;
-                
                         case NEW_SESS:
                             printf("Client requested to (create +) join session: %s\n", (char *) msg.data);
                             set_client_session(i, (char *) msg.data);
@@ -352,15 +409,36 @@ int main(int argc, char *argv[]) {
                             break;
                 
                         case MESSAGE:
-                            // printf("Client %s sent a MESSAGE.\n", msg.source);
-                            // handle_message(i, &msg);
+                            printf("Client %s trying to send message: %s\n", (char *) msg.source, (char *) msg.data);
+                            send_to_session(get_client_session(i), i, (char *) msg.data);
                             break;
-                
                         case QUERY:
-                            // printf("Client %s requested QUERY.\n", msg.source);
-                            // handle_query(i);
+                            printf("Client %s requested QUERY.\n", msg.source);
+
+                            char user_list[MAX_DATA] = "Users and their Sessions\n-------------------\n";
+
+                            struct client_info *current = client_list;
+                            while (current != NULL) {
+                                char entry[MAX_NAME + MAX_NAME + 40];
+
+                                if (strlen(current->client_id) > 0) {
+                                    if (strlen(current->session_id) > 0) {
+                                        snprintf(entry, sizeof(entry), "%s (In session %s)\n", current->client_id, current->session_id);
+                                    } else {
+                                        snprintf(entry, sizeof(entry), "%s (No session)\n", current->client_id);
+                                    }
+                                    strcat(user_list, entry);
+                                }
+                                current = current->next;
+                            }
+                            send_quack(i, (char *) msg.source, user_list);
                             break;
-                
+                        
+                        case GET_MSG:
+                            printf("Client %s is trying to read backlog\n", (char *) msg.source);
+                            send_usermsg(i, (char *) msg.source, get_client_backlog(i));
+                            delete_client_backlog(i);
+                            break;
                         default:
                             printf("Unknown message type received: %d\n", msg.type);
                             break;

@@ -13,6 +13,8 @@ make sure to enter the client_dir and server_dir directories before running the 
 
 /createsession testsess
 
+/login bob mysecret 127.0.0.1 8000
+
 
 
 netstat -tuln
