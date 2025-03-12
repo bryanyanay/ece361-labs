@@ -53,7 +53,8 @@ void add_client(int client_socket, const char *client_id, struct sockaddr_in *cl
     }
 }
 
-void remove_client(int client_socket) {
+int remove_client(int client_socket) {
+    // returns 1 if client was removed, 0 otherwise
     struct client_info *current = client_list;
     struct client_info *previous = NULL;
 
@@ -65,15 +66,16 @@ void remove_client(int client_socket) {
                 previous->next = current->next;  
             }
             free(current);  
-            return;
+            return 1;
         }
         previous = current;
         current = current->next;
     }
 
     // if we reach end
-    fprintf(stderr, "Error: client to remove not found\n");
-    exit(1);
+    // fprintf(stderr, "Error: client to remove not found\n");
+    // exit(1);
+    return 0;
 }
 
 void print_client_list() {
@@ -156,10 +158,22 @@ int authenticate_user(const char *client_id, const char *password) {
     return 0; // Authentication failed
 }
 
+void remove_conn(int i, fd_set *master_ptr) {
+    close(i);
+    FD_CLR(i, master_ptr);
+
+    int removed = remove_client(i); // rmb client list doesn't only store authenticated clients, stores all active connections
+    if (removed) {
+        printf("Client removed from list.\n");
+    }
+    print_client_list();
+}
+
 void handle_login(int i, const struct message *msg, fd_set *master_ptr) {
     // check if client_id already exists 
     if (client_exists((char *) msg->source)) {
         send_lonak(i, (char *) msg->source, "This client id already exists.");
+        remove_conn(i, master_ptr); 
         return;
     }
     
@@ -171,13 +185,7 @@ void handle_login(int i, const struct message *msg, fd_set *master_ptr) {
 
     } else {
         send_lonak(i, (char *) msg->source, "Either user does not exist or password incorrect.");
-        
-        close(i);
-        FD_CLR(i, master_ptr);
-
-        remove_client(i);
-        printf("Client removed from list due to incorrect authentication.\n");
-        print_client_list();
+        remove_conn(i, master_ptr);
     }
 }
 
@@ -290,21 +298,16 @@ int main(int argc, char *argv[]) {
                 memset(&msg, 0, sizeof(msg));
                 int nbytes = receive_message(i, &msg);
 
-                print_message(&msg);
+                // print_message(&msg);
 
                 if (nbytes <= 0) { // either hung up or errored
                     if (nbytes == 0) { // connection closes
-                        printf("Client with fd %d hung up.", i);
+                        printf("Client with fd %d hung up.\n", i);
                     } else {
                         fprintf(stderr, "Failed to receive client data.\n");
                         exit(1);
                     }
-                    close(i);
-                    FD_CLR(i, &master);
-
-                    remove_client(i);
-                    printf("Client removed from list.\n");
-                    print_client_list();
+                    remove_conn(i, &master);
                 } else { // got data from client
 
                     switch (msg.type) {
