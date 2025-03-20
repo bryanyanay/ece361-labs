@@ -320,11 +320,11 @@ int main() {
             }
         } else {
             if (!logged_in) {
-                printf("You must be logged in to use this command.\n");
+                printf("You must be logged in to send messages.\n");
                 goto loop_end;
             }
             if (!in_session) {
-                printf("Not in session yet.\n");
+                printf("You must be in session to send messages.\n");
                 goto loop_end;
             }
             send_usermsg(client_socket, client_id, user_input);

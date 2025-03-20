@@ -9,13 +9,77 @@
 struct user_cred {
     char client_id[MAX_NAME];
     char password[MAX_DATA];
+    struct user_cred *next;
 };
 
+/*
 struct user_cred user_cred_list[] = { // THIS MAY NEED TO BECOME A LINKED LIST LATER ON
     {"bryan", "hello123"},
     {"fu", "pass123"},
     {"bob", "mysecret"},
 };
+*/
+
+struct user_cred *user_list = NULL;
+
+int username_exists(const char *client_id) {
+    struct user_cred *current = user_list;
+    while (current) {
+        if (strcmp(current->client_id, client_id) == 0) {
+            return 1;  
+        }
+        current = current->next;
+    }
+    return 0;  
+}
+
+void add_user(const char *client_id, const char *password) {
+    // adds to head of linked list
+    if (username_exists(client_id)) {
+        printf("Error: Client ID '%s' already registered.\n", client_id);
+        exit(1);
+    }
+
+    struct user_cred *new_user = (struct user_cred *) malloc(sizeof(struct user_cred));
+    if (!new_user) {
+        perror("Failed to allocate memory for new user.\n");
+        exit(1);
+    }
+
+    strncpy(new_user->client_id, client_id, MAX_NAME - 1);
+    new_user->client_id[MAX_NAME - 1] = '\0';
+
+    strncpy(new_user->password, password, MAX_DATA - 1);
+    new_user->password[MAX_DATA - 1] = '\0';
+
+    new_user->next = user_list;
+    user_list = new_user;
+}
+
+void print_users() {
+    struct user_cred *current = user_list;
+    printf("User List:\n");
+    while (current) {
+        printf("Client ID: %s, Password: %s\n", current->client_id, current->password);
+        current = current->next;
+    }
+}
+
+void free_user_list() {
+    struct user_cred *current = user_list;
+    while (current) {
+        struct user_cred *temp = current;
+        current = current->next;
+        free(temp);
+    }
+    user_list = NULL;
+}
+
+void initialize_user_list() {
+    add_user("bryan", "hello123");
+    add_user("fu", "pass123");
+    add_user("bob", "mysecret");
+}
 
 struct client_info {
     int client_socket;
@@ -149,13 +213,14 @@ void set_client_id(int client_socket, const char *client_id) {
 }
 
 int authenticate_user(const char *client_id, const char *password) {
-    int num_clients = sizeof(user_cred_list) / sizeof(user_cred_list[0]);
-    
-    for (int i = 0; i < num_clients; i++) {
-        if (strcmp(user_cred_list[i].client_id, client_id) == 0 && 
-            strcmp(user_cred_list[i].password, password) == 0) {
+    struct user_cred *current = user_list;
+
+    while (current) {
+        if (strcmp(current->client_id, client_id) == 0 && 
+            strcmp(current->password, password) == 0) {
             return 1; // Authentication successful
         }
+        current = current->next;
     }
     return 0; // Authentication failed
 }
@@ -188,17 +253,6 @@ void handle_login(int i, const struct message *msg, fd_set *master_ptr) {
         send_lonak(i, (char *) msg->source, "Either user does not exist or password incorrect.");
         remove_conn(i, master_ptr);
     }
-}
-
-int username_exists(const char *username) {
-    int num_users = sizeof(user_cred_list) / sizeof(user_cred_list[0]);
-
-    for (int i = 0; i < num_users; i++) {
-        if (strcmp(user_cred_list[i].client_id, username) == 0) {
-            return 1; 
-        }
-    }
-    return 0; 
 }
 
 void handle_signup(int i, const struct message *msg, fd_set *master_ptr) {
@@ -374,6 +428,8 @@ int main(int argc, char *argv[]) {
 
     printf(">>> Server now listening on port %d\n", port);
 
+    initialize_user_list(); // initialize the user credentials
+    print_users();
 
     struct sockaddr_storage remoteaddr; // the client's address
 
