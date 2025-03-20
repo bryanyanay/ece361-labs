@@ -1,0 +1,17 @@
+HERE WE EXPLAIN OUR IMPLEMENTATION OF THE TWO EXTRA FEATURES
+
+
+1. Private Messaging
+ - We add a new /privmsg command on the client-side 
+ - We add a new message type, PRIV_MSG, that will carry the private message
+    - the source field of this message actually holds the username the PM is destined to
+    - the data field contains "[PRIVATE FROM <username>] <message>"
+ - We add functionality to the server to add the private message to the destination user's backlog queue if it receives a PRIV_MSG
+ - We make the client poll for messages upon login instead of only upon joining a session, since it may receive PMs even if it isn't in a session yet
+
+2. User Registration
+ - We add new /signup command on the client-side
+ - We add new message types, SIGN_UP, SU_ACK, and SU_NAK
+ - Add handle_signup function on the server
+ - [change user_cred list to linked list?]
+ - [Add functions to read and write user creds to file]

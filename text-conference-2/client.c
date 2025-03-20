@@ -265,6 +265,59 @@ int main() {
             }
 
             send_privmsg(client_socket, client_id, dest_user, msg);
+        } else if (strncmp(user_input, "/signup", 7) == 0) {
+            char new_client_id[MAX_NAME];
+            char server_ip[INET_ADDRSTRLEN];
+            int server_port;
+            char password[MAX_DATA];
+            
+            if (logged_in) {
+                printf("You are already logged in to a server as %s, please log out first.\n", client_id);
+                goto loop_end;
+            }
+            // check if format is right
+            if (sscanf(user_input, "/signup %s %s %s %d", new_client_id, password, server_ip, &server_port) != 4) {
+                printf("Please make sure format is: /signup <client-id> <passwd> <server-ip> <server-port>\n");
+                goto loop_end;
+            }
+
+            client_socket = socket(AF_INET, SOCK_STREAM, 0);
+            if (client_socket < 0) {
+                perror("socket");
+                exit(1);
+            }
+            struct sockaddr_in server_addr;
+            server_addr.sin_family = AF_INET;
+            server_addr.sin_port = htons(server_port);
+            inet_pton(AF_INET, server_ip, &server_addr.sin_addr);
+            
+            if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+                perror("connect");
+                exit(1);
+            }
+            
+            printf("Connected to server.\n");
+            printf("Sending signup message...\n");
+
+            send_signup(client_socket, new_client_id, password);
+            
+            struct message response;
+            memset(&response, 0, sizeof(response));
+            if (receive_message(client_socket, &response) <= 0) {
+                fprintf(stderr, "Failed to receive sign up ack.\n");
+                exit(1);
+            }
+
+            if (response.type == SU_ACK) {
+                logged_in = 1;
+                printf("Successfully signed up (and logged in) as %s.\n", client_id);
+                start_polling(); // start polling on login since we might get pms
+            } else if (response.type == SU_NAK) {
+                printf("Error: %s\n", (char *) response.data);
+            } else {
+                printf("Received incorrect response type:\n");
+                print_message(&response);
+            }
         } else {
             if (!logged_in) {
                 printf("You must be logged in to use this command.\n");

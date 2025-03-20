@@ -11,7 +11,7 @@ struct user_cred {
     char password[MAX_DATA];
 };
 
-struct user_cred user_cred_list[] = {
+struct user_cred user_cred_list[] = { // THIS MAY NEED TO BECOME A LINKED LIST LATER ON
     {"bryan", "hello123"},
     {"fu", "pass123"},
     {"bob", "mysecret"},
@@ -174,7 +174,7 @@ void remove_conn(int i, fd_set *master_ptr) {
 void handle_login(int i, const struct message *msg, fd_set *master_ptr) {
     // check if client_id already exists 
     if (client_exists((char *) msg->source)) {
-        send_lonak(i, (char *) msg->source, "This client id already exists.");
+        send_lonak(i, (char *) msg->source, "This client id is already logged in.");
         remove_conn(i, master_ptr); 
         return;
     }
@@ -184,11 +184,43 @@ void handle_login(int i, const struct message *msg, fd_set *master_ptr) {
         // set it's client id 
         set_client_id(i, (char *) msg->source);
         print_client_list();
-
     } else {
         send_lonak(i, (char *) msg->source, "Either user does not exist or password incorrect.");
         remove_conn(i, master_ptr);
     }
+}
+
+int username_exists(const char *username) {
+    int num_users = sizeof(user_cred_list) / sizeof(user_cred_list[0]);
+
+    for (int i = 0; i < num_users; i++) {
+        if (strcmp(user_cred_list[i].client_id, username) == 0) {
+            return 1; 
+        }
+    }
+    return 0; 
+}
+
+void handle_signup(int i, const struct message *msg, fd_set *master_ptr) {
+    // check if this user already exists
+    // if so, send THIS USER ALREADY EXISTS, TRY LOGGING IN INSTEAD
+    if (username_exists((char *) msg->source)) {
+        send_sunak(i, (char *) msg->source, "This client id already registered, trying logging in instead.");
+        remove_conn(i, master_ptr); 
+        return;
+    }
+    
+    // gotta add the user here
+
+    // if (authenticate_user((char *)msg->source, (char *)msg->data)) {
+    //     send_loack(i, (char *) msg->source);
+    //     // set it's client id 
+    //     set_client_id(i, (char *) msg->source);
+    //     print_client_list();
+    // } else {
+    //     send_lonak(i, (char *) msg->source, "Either user does not exist or password incorrect.");
+    //     remove_conn(i, master_ptr);
+    // }
 }
 
 void set_client_session(int client_socket, const char *session_id) {
@@ -394,6 +426,10 @@ int main(int argc, char *argv[]) {
                     switch (msg.type) {
                         case LOGIN:
                             handle_login(i, &msg, &master);
+                            break;
+                        case SIGN_UP:
+                            print_message(&msg);
+                            handle_signup(i, &msg, &master);
                             break;
                         case EXIT:
                             remove_conn(i, &master);

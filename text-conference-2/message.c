@@ -375,3 +375,62 @@ void send_privmsg(int sock, const char *client_id, const char *dest_user, const 
         exit(1);
     }
 }
+
+
+void send_suack(int sock, const char *client_id) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = SU_ACK;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    msg.data[0] = '\0';
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send sign up ack message.\n");
+        exit(1);
+    }
+}
+
+void send_sunak(int sock, const char *client_id, const char *data) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = SU_NAK;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    strcpy((char *)msg.data, data);
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send sign up nak message.\n");
+        exit(1);
+    }
+}
+
+void send_signup(int sock, const char *client_id, const char *password) {
+    struct message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    msg.type = SIGN_UP;
+
+    strncpy((char *)msg.source, client_id, MAX_NAME - 1);
+    msg.source[MAX_NAME - 1] = '\0';
+
+    strncpy((char *)msg.data, password, MAX_DATA - 1);
+    msg.data[MAX_DATA - 1] = '\0';
+
+    msg.size = strlen((char *)msg.source) + strlen((char *)msg.data);
+
+    if (send_message(sock, &msg) < 0) {
+        fprintf(stderr, "Failed to send sign up message.\n");
+        exit(1);
+    }
+}
