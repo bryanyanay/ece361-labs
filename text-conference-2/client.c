@@ -310,6 +310,8 @@ int main() {
 
             if (response.type == SU_ACK) {
                 logged_in = 1;
+                strncpy(client_id, new_client_id, MAX_NAME - 1);
+                client_id[MAX_NAME - 1] = '\0';  // Ensure null termination
                 printf("Successfully signed up (and logged in) as %s.\n", client_id);
                 start_polling(); // start polling on login since we might get pms
             } else if (response.type == SU_NAK) {

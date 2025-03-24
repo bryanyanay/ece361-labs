@@ -15,7 +15,7 @@ make sure to enter the client_dir and server_dir directories before running the 
 
 /login bob mysecret 127.0.0.1 8000
 
-/signup newuser1 newpass1 127.0.0.1 8000
+/signup newuser2 newpass2 127.0.0.1 8000
 
 
 netstat -tuln

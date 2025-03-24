@@ -75,10 +75,63 @@ void free_user_list() {
     user_list = NULL;
 }
 
+#define CREDENTIALS_FILE "user_credentials.txt"
+
+void write_credentials_to_file() {
+    FILE *fp = fopen(CREDENTIALS_FILE, "w");
+    if (!fp) {
+        perror("Failed to open credentials file for writing");
+        exit(1);
+    }
+
+    struct user_cred *current = user_list;
+    while (current) {
+        fprintf(fp, "%s:%s\n", current->client_id, current->password);
+        current = current->next;
+    }
+
+    fclose(fp);
+}
+
+void read_credentials_from_file() {
+    FILE *fp = fopen(CREDENTIALS_FILE, "r");
+    if (!fp) {
+        // file doesn't exist, create with default users
+        fp = fopen(CREDENTIALS_FILE, "w");
+        if (!fp) {
+            perror("Failed to create credentials file");
+            exit(1);
+        }
+        fprintf(fp, "bryan:hello123\n");
+        fprintf(fp, "fu:pass123\n");
+        fprintf(fp, "bob:mysecret\n");
+        fclose(fp);
+        
+        // read from file just created
+        fp = fopen(CREDENTIALS_FILE, "r");
+        if (!fp) {
+            perror("Failed to open credentials file for reading");
+            exit(1);
+        }
+    }
+
+    char line[MAX_NAME + MAX_DATA + 2]; // +2 for colon and newline
+    while (fgets(line, sizeof(line), fp)) {
+        line[strcspn(line, "\n")] = '\0';
+        
+        char *username = strtok(line, ":");
+        char *password = strtok(NULL, ":");
+        
+        if (username && password) {
+            add_user(username, password);
+        }
+    }
+
+    fclose(fp);
+}
+
 void initialize_user_list() {
-    add_user("bryan", "hello123");
-    add_user("fu", "pass123");
-    add_user("bob", "mysecret");
+    read_credentials_from_file();
 }
 
 struct client_info {
@@ -259,22 +312,21 @@ void handle_signup(int i, const struct message *msg, fd_set *master_ptr) {
     // check if this user already exists
     // if so, send THIS USER ALREADY EXISTS, TRY LOGGING IN INSTEAD
     if (username_exists((char *) msg->source)) {
-        send_sunak(i, (char *) msg->source, "This client id already registered, trying logging in instead.");
+        send_sunak(i, (char *) msg->source, "This client id already registered, try logging in instead.");
         remove_conn(i, master_ptr); 
         return;
     }
     
-    // gotta add the user here
-
-    // if (authenticate_user((char *)msg->source, (char *)msg->data)) {
-    //     send_loack(i, (char *) msg->source);
-    //     // set it's client id 
-    //     set_client_id(i, (char *) msg->source);
-    //     print_client_list();
-    // } else {
-    //     send_lonak(i, (char *) msg->source, "Either user does not exist or password incorrect.");
-    //     remove_conn(i, master_ptr);
-    // }
+    // Add the new user
+    add_user((char *)msg->source, (char *)msg->data);
+    
+    // Write updated credentials to file
+    write_credentials_to_file();
+    
+    // Send success response
+    send_suack(i, (char *)msg->source);
+    set_client_id(i, (char *)msg->source);
+    print_client_list();
 }
 
 void set_client_session(int client_socket, const char *session_id) {

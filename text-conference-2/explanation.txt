@@ -13,5 +13,5 @@ HERE WE EXPLAIN OUR IMPLEMENTATION OF THE TWO EXTRA FEATURES
  - We add new /signup command on the client-side
  - We add new message types, SIGN_UP, SU_ACK, and SU_NAK
  - Add handle_signup function on the server
- - [change user_cred list to linked list?]
- - [Add functions to read and write user creds to file]
+ - changed the user credential list on the server to a linked list
+ - Add functions to read and write user creds to file on the server, specifically user_credentials.txt
